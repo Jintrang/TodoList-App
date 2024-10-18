@@ -17,4 +17,6 @@ public interface ITaskService {
     Task getTaskById(String id) throws Exception;
     Page<Task> getTaskByStatus(String status, PageRequest pageRequest) throws Exception;
     public boolean exitsByTitle(String taskTitle);
+
+    Page<Task> getTasks(int page, int limit, String arrangement, String status) throws Exception;
 }
