@@ -1,27 +1,39 @@
 package com.example.todolist.controllers;
 
 import com.example.todolist.dtos.TaskDTO;
+import com.example.todolist.exceptions.DataNotFoundException;
 import com.example.todolist.models.Task;
 import com.example.todolist.repositories.TaskRepository;
 import com.example.todolist.services.TaskService;
+import com.github.javafaker.Faker;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Random;
 import java.util.stream.Collectors;
 
-@RestController
+@Controller
 @RequestMapping("api/v1/tasks")
 @RequiredArgsConstructor
 public class TaskController {
     private final TaskService taskService;
+    @GetMapping("/home/mist")
+    public String check (Model model) {
+        String name = "Mist ";
+        model.addAttribute("name", name);
+        return "home";
+    }
 
     @PostMapping("")
     public ResponseEntity<?> createTask(@Valid @RequestBody TaskDTO taskDTO, BindingResult result) {
@@ -39,35 +51,38 @@ public class TaskController {
         }
     }
 
-//    @GetMapping("")
-//    public ResponseEntity<?> getAllTasks(@RequestParam ("page") int page, @RequestParam("limit") int limit ) {
-//        return ResponseEntity.ok().body(page +" : " + limit);
-//    }
-    @GetMapping("/arrangement")
-    public ResponseEntity<?> getTaskByArrangement(@RequestParam("page") int page,
+    private PageRequest createPageRequest(int page, int limit, String arrangement) {
+        return switch (arrangement.toUpperCase()) {
+            case "", "LASTDATE" -> PageRequest.of(page, limit, Sort.by("createdAt").descending());
+            case "MINSCORE" -> PageRequest.of(page, limit, Sort.by("score").ascending());
+            case "MAXSCORE" -> PageRequest.of(page, limit, Sort.by("score").descending());
+            case "FISRTDATE" -> PageRequest.of(page, limit, Sort.by("createdAt").ascending());
+            default -> throw new IllegalArgumentException("Invalid arrangement");
+        };
+    }
+    @GetMapping("")
+    public String getAllTask(@RequestParam("page") int page,
                                                   @RequestParam("limit") int limit,
-                                                  @RequestParam("arrangement") String arrangement ) {
-        PageRequest pageRequest;
-        switch (arrangement.toUpperCase()) {
-            case "":
-            case "LASTDATE":
-                pageRequest = PageRequest.of(page, limit, Sort.by("createdAt").descending());
-                break;
-            case "MINSCORE":
-                pageRequest = PageRequest.of(page, limit, Sort.by("score").descending());
-                break;
-            case "MAXSCORE":
-                pageRequest = PageRequest.of(page, limit, Sort.by("score").ascending());
-                break;
-            case "FISRTDATE":
-                pageRequest = PageRequest.of(page, limit, Sort.by("createdAt").ascending());
-                break;
-            default:
-                return ResponseEntity.badRequest().body("Cannot sort by" + arrangement);
+                                                  @RequestParam("arrangement") String arrangement,
+                                                  @RequestParam("status") String status,
+                                                  Model model) {
+        PageRequest pageRequest = createPageRequest(page, limit, arrangement);
+        Page<Task> tasks;
+        if (status.equalsIgnoreCase("")) {
+            tasks = taskService.getAllTasks(pageRequest);
+        } else {
+            try {
+                tasks = taskService.getTaskByStatus(status.toUpperCase(), pageRequest);
+            } catch (Exception e) {
+                //return ResponseEntity.badRequest().body(e.getMessage());
+                return "error";
+            }
         }
-        Page<Task> tasks = taskService.getAllTasks(pageRequest);
         List<Task> taskList = tasks.getContent();
-        return ResponseEntity.ok().body(taskList);
+        model.addAttribute("arrange", arrangement);
+        model.addAttribute("tasks", taskList);
+        //return ResponseEntity.ok().body(taskList);
+        return "tasks";
     }
 
     @GetMapping("/{id}")
@@ -80,15 +95,15 @@ public class TaskController {
         }
     }
 
-    @GetMapping("")
-    public ResponseEntity<?> getTaskByStatus(@RequestParam("status") String status) {
-        try {
-            List<Task> taskList = taskService.getTaskByStatus(status.toUpperCase());
-            return ResponseEntity.ok().body(taskList);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
+//    @GetMapping("")
+//    public ResponseEntity<?> getTaskByStatus(@RequestParam("status") String status) {
+//        try {
+//            List<Task> taskList = taskService.getTaskByStatus(status.toUpperCase());
+//            return ResponseEntity.ok().body(taskList);
+//        } catch (Exception e) {
+//            return ResponseEntity.badRequest().body(e.getMessage());
+//        }
+//    }
 
     @PutMapping("/{id}")
     public ResponseEntity<?> updateTask(@Valid @RequestBody TaskDTO taskDTO, @PathVariable String id, BindingResult result) {
@@ -114,5 +129,31 @@ public class TaskController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
+    }
+
+
+    @PostMapping("/generateFakeTask")
+    public ResponseEntity<?> generateFakeProducts() {
+        Faker faker = new Faker();
+        Random random = new Random();
+        String[] statuses = {"FINISHED", "PROCESSING", "UNSTARTED"};
+        for (int i = 0; i < 100; i++) {
+            String taskTitle = faker.book().title();
+            String status = statuses[random.nextInt(statuses.length)];
+            if(taskService.exitsByTitle(taskTitle)) continue;
+            TaskDTO taskDTO = TaskDTO.builder()
+                    .title(taskTitle)
+                    .description(faker.lorem().sentence())
+                    .score((int)faker.number().numberBetween(0, 100))
+                    .status(status)
+                    .deadline(LocalDate.now().plusDays(faker.number().numberBetween(1, 30)))
+                    .build();
+            try {
+                Task fakeTask = taskService.createTask(taskDTO);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return ResponseEntity.ok().body("Create fake Task");
     }
 }

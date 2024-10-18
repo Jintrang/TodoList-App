@@ -2,3 +2,10 @@ spring:
   data:
     mongodb:
       uri: mongodb://localhost:27017/todolist
+  freemarker:
+    template-loader-path: classpath:/templates/
+    suffix: .ftl
+    charset: UTF-8
+    content-type: text/html
+    cache: false
+

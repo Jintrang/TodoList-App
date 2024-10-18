@@ -56,7 +56,12 @@ public class TaskService implements ITaskService {
     }
 
     @Override
-    public List<Task> getTaskByStatus(String status) throws Exception{
-        return taskRepository.findByStatus(status);
+    public Page<Task> getTaskByStatus(String status, PageRequest pageRequest) throws Exception{
+        return taskRepository.findByStatus(status, pageRequest);
+    }
+
+    @Override
+    public boolean exitsByTitle(String taskTitle) {
+        return taskRepository.existsByTitle(taskTitle);
     }
 }
